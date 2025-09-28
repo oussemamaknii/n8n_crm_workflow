@@ -1,289 +1,98 @@
-# TalentAI n8n Contact Ingestion Workflow
+# TalentAI n8n Contact Ingestion
 
-## 📋 Project Overview
+This repository contains an n8n-based ingestion pipeline that receives contacts from a CRM, normalizes and validates the data, persists it to PostgreSQL, and records detailed observability data. A dedicated error workflow logs failures and can notify operators.
 
-This project implements a robust n8n workflow that automatically ingests contacts from a CRM API, cleanses the data, and stores it in PostgreSQL with comprehensive error handling and monitoring.
+## Overview
 
-### 🎯 Mission Accomplished
-✅ Fetches new contacts from CRM API (HubSpot-compatible or mock API)  
-✅ Transforms and cleanses data (phone normalization, email validation, name formatting)  
-✅ Stores contacts in PostgreSQL with proper indexing  
-✅ Sends notifications and logs all operations  
-✅ Handles errors with automatic logging and alerting  
-✅ Implements idempotent operations (duplicate prevention)  
+The main workflow exposes a production webhook endpoint to receive contacts from a mock CRM API. It transforms input, identifies new contacts, inserts them into PostgreSQL, logs processing details, and returns a response to the caller. A separate error workflow starts with an Error Trigger node to log unhandled failures across workflows.
 
-## 🚀 Quick Start
+### Architecture
+```
+┌───────────┐    ┌─────────────┐    ┌─────────────┐
+│ Mock CRM  │──▶ │    n8n      │──▶ │ PostgreSQL  │
+│ (port 3000)│   │  workflow   │    │  (port 5432)│
+└───────────┘    └─────────────┘    └─────────────┘
+                         │
+                         └─────────────▶ Grafana (port 3001)
+```
 
+Services are defined in `docker-compose.yml`:
+- `postgres:15` with schema initialization from `init-db/`
+- `mock-crm` (Python API in `mock-crm/`) on port 3000
+- `n8n` on port 5678 (workflows mounted from `n8n-workflows/`)
+- `grafana` on port 3001
+
+## Setup
+
+Prerequisites: Docker and Docker Compose.
+
+Environment setup
 ```bash
-# 1. Start the infrastructure
-./setup.sh
-
-# 2. Access n8n UI
-open http://localhost:5678
-# Login: admin / talentai_admin_123
-
-# 3. Import workflow
-# File → Import → n8n-workflows/contact-ingestion-workflow.json
-
-# 4. Test with mock data
-curl -X POST http://localhost:5678/webhook/contacts-webhook
+cp .env.example .env
 ```
 
-## 🏗️ Architecture Overview
-
-```
-┌─────────────┐    ┌──────────────┐    ┌─────────────────┐    ┌──────────────┐
-│  CRM API    │───▶│  n8n Engine  │───▶│  PostgreSQL     │───▶│ Notifications│
-│ (HubSpot)   │    │              │    │  - contacts     │    │ (Teams/Email)│
-│             │    │ Workflow:    │    │  - audit_logs   │    │              │
-│ - Webhooks  │    │ • Normalize  │    │  - error_logs   │    │ - Success    │
-│ - REST API  │    │ • Validate   │    │                 │    │ - Alerts     │
-│ - Polling   │    │ • Dedupe     │    └─────────────────┘    └──────────────┘
-└─────────────┘    └──────────────┘
-```
-
-## 📊 Data Flow
-
-### 1. Data Ingestion
-- **Source**: CRM API (HubSpot, Salesforce, or mock API)
-- **Trigger**: Webhook push or scheduled polling (every 5 minutes)
-- **Format**: JSON payload with contact information
-
-### 2. Data Transformation
-- **Phone Numbers**: Various formats → E.164 international format
-  ```
-  "06 12 34 56 78" → "+33612345678"
-  "+33 1 23 45 67 89" → "+33123456789" 
-  "01.23.45.67.89" → "+33123456789"
-  ```
-- **Email Addresses**: Normalization and validation
-  ```
-  "Jean.Dupont@EXAMPLE.COM" → "jean.dupont@example.com"
-  ```
-- **Names**: Consistent uppercase formatting
-  ```
-  "jean dupont" → "JEAN DUPONT"
-  ```
-
-### 3. Database Storage
-**contacts** table:
-```sql
-CREATE TABLE contacts (
-    id                  BIGSERIAL PRIMARY KEY,
-    uuid                UUID DEFAULT uuid_generate_v4(),
-    crm_id              VARCHAR(64) UNIQUE NOT NULL,
-    first_name          TEXT,
-    last_name           TEXT,
-    full_name           TEXT GENERATED ALWAYS AS (...) STORED,
-    email               CITEXT,
-    phone_e164          VARCHAR(20),
-    phone_raw           TEXT,
-    company             TEXT,
-    job_title           TEXT,
-    tags                TEXT[],
-    raw_payload         JSONB,
-    source              VARCHAR(50) DEFAULT 'n8n_workflow',
-    status              VARCHAR(20) DEFAULT 'active',
-    created_at          TIMESTAMPTZ DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ DEFAULT NOW(),
-    processed_at        TIMESTAMPTZ DEFAULT NOW()
-);
-```
-
-## 🛡️ Security & Best Practices
-
-### ✅ Applied Best Practices
-1. **Security**
-   - Environment variables for sensitive data
-   - Parameterized SQL queries (no injection risks)
-   - Basic authentication for n8n UI
-   - Database user with limited privileges
-
-2. **Performance**
-   - Database indexes on key fields (crm_id, email, phone)
-   - Generated computed fields for optimized queries
-   - Batch processing capability
-   - Connection pooling via Docker networking
-
-3. **Reliability**
-   - Idempotent operations (duplicate prevention)
-   - Comprehensive error logging
-   - Transaction-safe database operations
-   - Health checks for all services
-
-4. **Observability**
-   - Structured logging in PostgreSQL
-   - Processing metrics and status tracking
-   - Execution correlation with workflow IDs
-   - Raw payload preservation for debugging
-
-## 🔍 Monitoring & Alerts
-
-### Key Performance Indicators
-```sql
--- Success rate monitoring
-SELECT 
-  status,
-  COUNT(*) as count,
-  ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER(), 2) as percentage
-FROM contact_processing_log 
-WHERE created_at > NOW() - INTERVAL '24 hours'
-GROUP BY status;
-
--- Processing throughput
-SELECT 
-  DATE_TRUNC('hour', created_at) as hour,
-  COUNT(*) as contacts_processed
-FROM contact_processing_log 
-WHERE created_at > NOW() - INTERVAL '24 hours'
-GROUP BY hour
-ORDER BY hour;
-```
-
-### Alerting Strategy
-- **Error Rate**: Alert if >5% of contacts fail processing
-- **Duplicate Rate**: Monitor for unusual duplicate patterns
-- **Processing Lag**: Alert if queue backlog exceeds 1 hour
-- **Database Health**: Monitor connection pool and query performance
-
-## ⚡ Scalability Roadmap
-
-### Current Capacity: ~1,000 contacts/day
-- Single n8n instance
-- PostgreSQL on single container
-- Synchronous processing
-
-### Scaling to 100,000 contacts/day
-
-#### 1. Horizontal Scaling
-```yaml
-# docker-compose.scale.yml
-services:
-  n8n-worker:
-    image: n8nio/n8n:latest
-    replicas: 3
-    environment:
-      - N8N_EXECUTIONS_MODE=queue
-      - QUEUE_BULL_REDIS_HOST=redis
-```
-
-#### 2. Database Optimization
-- **Partitioning**: Partition contacts table by date
-- **Read Replicas**: Separate read/write workloads
-- **Connection Pooling**: PgBouncer for connection management
-- **Batch Processing**: Process 100+ contacts per workflow run
-
-#### 3. Infrastructure Architecture
-```
-┌─────────────┐    ┌──────────────┐    ┌─────────────────┐
-│  Load       │    │  n8n Workers │    │  PostgreSQL     │
-│  Balancer   │────┤  (3 replicas)│────│  Primary +      │
-│  (nginx)    │    │              │    │  Read Replicas  │
-└─────────────┘    │  Redis Queue │    └─────────────────┘
-                   └──────────────┘
-```
-
-#### 4. Cost Estimation (100k/day)
-- **Kubernetes Cluster**: 3 nodes × $50/month = $150/month
-- **Managed PostgreSQL**: $80/month
-- **Redis Cache**: $30/month
-- **Monitoring Stack**: $40/month
-- **Total**: ~$300/month
-
-## 🧪 Testing
-
-### Unit Tests
+Start the stack
 ```bash
-# Test phone normalization
-echo '{"phone": "06 12 34 56 78"}' | curl -X POST http://localhost:3000/test/normalize
-
-# Test duplicate detection
-docker exec talentai_postgres psql -U n8n_user -d talentai -c \
-  "SELECT COUNT(*) FROM contacts WHERE crm_id = 'test_duplicate';"
+docker compose up -d
 ```
 
-### Integration Tests
-```bash
-# End-to-end workflow test
-curl -X POST http://localhost:5678/webhook/contacts-webhook \
-  -H "Content-Type: application/json" \
-  -d '{"test_data": true, "contacts": [{"id": "test_123", "firstName": "Test", "email": "test@example.com"}]}'
+## Workflows
+
+### Main workflow (`n8n-workflows/workflow.json`)
+Key nodes:
+- `CRM Webhook Trigger`: Production webhook path `contacts-webhook`.
+- `Start Run`: Inserts a row in `ingestion_runs` to track the execution.
+- `Fetch CRM Existing Contacts` and `Fetch CRM New Contacts`: Talks to `mock-crm`.
+- `Extract & Transform Contacts` and `Normalize Contact Data`: Normalizes names, email, and phone into E.164.
+- `Check Contact Exists`: Gets already-known `crm_id` values.
+- `New Contacts` + `If`: Filters only new records.
+- `Insert New Contact`: Inserts into `contacts` with ON CONFLICT DO NOTHING.
+- `Log Inserted Contacts` and `Compute/Log Duplicates`: Adds per-contact audit rows in `contact_processing_log`.
+- `Merge` → `Finalize Run`: Completes the run and updates run-level metrics. Finally, `Webhook Response` returns to the caller.
+
+### Error workflow (`n8n-workflows/Global Error Notifier.json`)
+- Starts with `Error Trigger` (no activation required; runs for automatic/production executions).
+- `Log Error to DB`: Inserts error details into `processing_errors` without setting the `id` (auto-generated by BIGSERIAL).
+- `Send a message`: Email notification.
 ```
 
-## 📁 Project Structure
+## Database schema
 
-```
-talentai_homework/
-├── 📄 README.md                          # This file
-├── 📄 aplan.txt                          # Step-by-step project plan
-├── 📄 requirements.txt                   # Original project requirements
-├── 🐳 docker-compose.yml                 # Infrastructure definition
-├── 📄 .env                              # Environment variables
-├── 🚀 setup.sh                          # One-click setup script
-├── 🐍 mock-crm-api.py                   # Test CRM API server
-├── 📄 preconditions-checklist.md        # Environment requirements
-├── 📁 init-db/
-│   └── 📄 01-create-schema.sql          # Database schema
-├── 📁 n8n-workflows/
-│   └── 📄 contact-ingestion-workflow.json # Main n8n workflow
-├── 📄 n8n-workflow-setup.md             # Workflow setup guide
-└── 📄 improvements.md                    # Scaling recommendations
-```
+Schema is created by `init-db/01-create-schema.sql` and `init-db/02-observability.sql`.
 
-## 🤝 Contributing
+Primary tables:
+- `contacts`: core contact store; `crm_id` is unique; computed `full_name`; indices on email, phone, and metadata.
+- `contact_processing_log`: per-contact audit trail with `operation`, `status`, `message`, `workflow_execution`, and optional `run_id` and `event_type`.
+- `processing_errors`: stores unhandled errors captured by the error workflow. `id` is BIGSERIAL; do not set it from n8n.
+- `ingestion_runs`: one row per workflow execution with counters for received, inserted, duplicates, emails, and status.
 
-### Development Setup
-1. Clone repository
-2. Run `./setup.sh`
-3. Import workflow into n8n
-4. Configure credentials
-5. Test with mock data
+Sequences and indices are created for performance and reporting. See the SQL files for full definitions.
 
-### Workflow Modifications
-1. Export changes from n8n UI
-2. Save to `n8n-workflows/` directory
-3. Update documentation
-4. Test thoroughly
+## Monitoring (Grafana)
 
-## 🔧 Troubleshooting
+Grafana is provisioned with dashboards from `grafana/dashboards/`. Access at http://localhost:3001. The dashboards visualize ingestion runs, throughput, and error counts using the data stored in PostgreSQL.
 
-### Common Issues
+### Design logic
+- Ingestion is webhook-driven to minimize polling latency and simplify external integrations. The main workflow normalizes input (name, email, phone), deduplicates by `crm_id`, inserts into `contacts`, and writes audit rows to `contact_processing_log`. Each run is tracked in `ingestion_runs` with counters and timestamps for observability. A dedicated error workflow, starting with `Error Trigger`, logs unhandled failures to `processing_errors` and can notify by email.
+- Data quality is enforced early: phone numbers are converted to E.164, emails normalized and filtered with a basic regex, and names uppercased to generate `full_name` consistently.
+- The workflow responds via `Webhook Response` after run completion; this ensures the caller gets a response only when downstream persistence has concluded.
 
-**n8n not accessible**
-```bash
-docker logs talentai_n8n
-curl http://localhost:5678/healthz
-```
+### Best practices applied
+- Security: n8n basic auth, least-privilege DB user, and environment-driven secrets in `docker-compose.yml`.
+- Data integrity: parameterized SQL or explicit column mapping, `BIGSERIAL` primary keys, and unique `crm_id` with relevant indexes (email, phone, tags, raw payload GIN).
+- Idempotency: deduplication through existence checks plus `ON CONFLICT DO NOTHING` on `crm_id`.
+- Observability: per-contact logs, per-execution run records, simple metrics usable by Grafana, and structured error logging.
+- Maintainability: clear node names, separation of error handling into a dedicated workflow, and a normalized schema with computed `full_name` for consistent reads.
 
-**Database connection fails**
-```bash
-docker exec talentai_postgres pg_isready -U n8n_user -d talentai
-```
+### Limitations and targeted improvements
+- Single-instance n8n: the current setup runs inline on one n8n container. Improve resilience with queue mode and workers.
+- Limited retries/backoff: add node-level retries with exponential backoff and circuit-breaker semantics for flaky external calls.
+- Batch efficiency: insert batching is limited; adopt bulk insert patterns for higher throughput and fewer round trips.
+- Rate limiting: introduce per-provider rate controls and centralized throttling for external APIs.
 
-**Workflow execution errors**
-```sql
-SELECT * FROM contact_processing_log WHERE status = 'error' ORDER BY created_at DESC LIMIT 5;
-```
-
-**Mock API not responding**
-```bash
-curl http://localhost:3000/health
-# Restart if needed: python3 mock-crm-api.py
-```
-
-## 📞 Support
-
-For questions or issues:
-1. Check the troubleshooting section above
-2. Review logs in `contact_processing_log` table
-3. Verify all services are healthy: `docker ps`
-4. Test individual components separately
-
----
-
-**🎯 Project Status**: ✅ **COMPLETE**  
-**📊 Test Coverage**: Functional workflow with comprehensive error handling  
-**🚀 Production Ready**: With scaling recommendations for 100k+ contacts/day  
-**📈 Monitoring**: Database-driven metrics and alerting ready  
-
-
+### Scaling plan (target: 100,000 records/day)
+- Execution model: enable n8n queue mode with Redis and deploy 3–5 workers; keep the editor as a separate instance.
+- Database: partition large tables by time, add read replicas, and front with PgBouncer. Move heavy analytics to replicas.
+- Throughput: use bulk inserts for contacts and logs, reduce synchronous email sends or route them to an async notification workflow.
+- Reliability: retries with jitter, dead-letter paths for repeatedly failing items, and idempotency keys for reprocessing.
+- Monitoring: expand Grafana dashboards to include queue lag, worker saturation, and DB query latency, plus alerts for error rates and backlog growth.

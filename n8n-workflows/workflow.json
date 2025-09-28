@@ -8,7 +8,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        656,
+        864,
         -576
       ],
       "id": "17f27f0b-7a95-4218-b29d-c10206034ee8",
@@ -24,7 +24,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        2864,
+        3072,
         -240
       ]
     },
@@ -41,7 +41,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
       "position": [
-        1488,
+        1696,
         -512
       ],
       "credentials": {
@@ -54,7 +54,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT crm_id FROM public.contacts WHERE crm_id IN ({{ $json.crm_ids_sql }})",
+        "query": "SELECT crm_idd FROM public.contacts WHERE crm_id IN ({{ $json.crm_ids_sql }})",
         "options": {}
       },
       "id": "ed2fa0c4-7dbf-4578-9693-d70b0763be23",
@@ -62,10 +62,11 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
       "position": [
-        832,
+        1040,
         -576
       ],
       "alwaysOutputData": true,
+      "notesInFlow": false,
       "credentials": {
         "postgres": {
           "id": "IeOu1chzidy5ogq9",
@@ -83,7 +84,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        512,
+        720,
         -256
       ]
     },
@@ -96,7 +97,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        16,
+        224,
         -272
       ]
     },
@@ -111,7 +112,7 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
       "position": [
-        -960,
+        -1184,
         -272
       ],
       "webhookId": "contacts-webhook"
@@ -123,7 +124,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1072,
+        1280,
         -256
       ],
       "id": "95315c0f-0b9a-404a-88ab-eaba8cf79159",
@@ -158,7 +159,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        1296,
+        1504,
         -256
       ],
       "id": "4a28eb49-ee7f-4dc3-8ee7-baf937a95636",
@@ -175,7 +176,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
       "position": [
-        -448,
+        -240,
         -432
       ]
     },
@@ -189,7 +190,7 @@
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
-        1664,
+        1872,
         -400
       ],
       "id": "42deda22-0f36-4c9f-868c-edc1cc791225",
@@ -214,7 +215,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
       "position": [
-        -448,
+        -240,
         -128
       ]
     },
@@ -227,7 +228,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
       "position": [
-        -720,
+        -512,
         -272
       ],
       "id": "f108a416-02a9-4ee0-857a-3dcaf89aa178",
@@ -248,7 +249,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
       "position": [
-        192,
+        400,
         -32
       ],
       "id": "a9911d07-053d-48e3-b43b-e12a1b9243b3",
@@ -268,7 +269,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1344,
+        1552,
         -48
       ],
       "id": "b1626f83-3b72-4a86-b0b7-9384cbd5e9b9",
@@ -286,7 +287,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
       "position": [
-        1824,
+        2032,
         -48
       ],
       "id": "ff3f6106-5905-4655-a575-76679804e9ee",
@@ -311,7 +312,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
       "position": [
-        1664,
+        1872,
         -624
       ],
       "id": "a1e82ee6-816c-4a2c-b28b-1a15c7b1005e",
@@ -333,44 +334,12 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
       "position": [
-        2544,
+        2752,
         -240
       ],
       "id": "4685bf74-60d1-4006-88ec-e19794e16a97",
       "name": "Finalize Run",
       "alwaysOutputData": true,
-      "credentials": {
-        "postgres": {
-          "id": "IeOu1chzidy5ogq9",
-          "name": "Postgres account"
-        }
-      }
-    },
-    {
-      "parameters": {},
-      "type": "n8n-nodes-base.errorTrigger",
-      "typeVersion": 1,
-      "position": [
-        656,
-        224
-      ],
-      "id": "6d3a3b87-7314-48fa-b2fc-8365ce21bb2a",
-      "name": "Error Trigger"
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO processing_errors (\n  error_code, error_message, error_details, input_data,\n  workflow_step, retry_count, resolved, execution_id\n) VALUES (\n  {{ $json.error?.code || null }},\n  {{ $json.error?.message || 'Unknown error' }},\n  {{ JSON.stringify($json.error || {}) }},\n  {{ JSON.stringify($json.execution?.data?.resultData || {}) }},\n  {{ $json.error?.node?.name || null }},\n  0,\n  FALSE,\n  {{ $json.execution?.id || null }}\n);",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.4,
-      "position": [
-        976,
-        224
-      ],
-      "id": "6b1d703d-bbbc-4145-b23e-8d3783210e47",
-      "name": "Log Error to DB",
       "credentials": {
         "postgres": {
           "id": "IeOu1chzidy5ogq9",
@@ -385,7 +354,7 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
       "position": [
-        2144,
+        2352,
         -256
       ],
       "id": "9499e35e-54e5-414b-83b3-428f1e66ca5b",
@@ -401,7 +370,7 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
       "position": [
-        1872,
+        2080,
         -512
       ],
       "id": "c4677217-3c6c-49e3-8d0f-adec8d5ba6a4",
@@ -414,7 +383,7 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
       "position": [
-        336,
+        544,
         -256
       ],
       "id": "1d54d469-7fcd-4fb1-a258-1a97223103d1",
@@ -425,11 +394,24 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
       "position": [
-        -176,
+        32,
         -272
       ],
       "id": "3ff59dcb-6d4b-4605-beec-28a066a7796c",
       "name": "Merge4"
+    },
+    {
+      "parameters": {
+        "jsCode": "throw new Error('test')"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -896,
+        -480
+      ],
+      "id": "46967e9b-a6aa-42e6-a137-0100863315dd",
+      "name": "Code in JavaScript1"
     }
   ],
   "pinData": {},
@@ -469,7 +451,8 @@
             "type": "main",
             "index": 0
           }
-        ]
+        ],
+        []
       ]
     },
     "Normalize Contact Data": {
@@ -620,17 +603,6 @@
         ]
       ]
     },
-    "Error Trigger": {
-      "main": [
-        [
-          {
-            "node": "Log Error to DB",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Merge": {
       "main": [
         [
@@ -707,13 +679,24 @@
           }
         ]
       ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        []
+      ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "VFFqtNHpF92Vj6Yw",
+    "executionTimeout": 1800,
+    "saveDataErrorExecution": "all",
+    "saveExecutionProgress": true,
+    "timeSavedPerExecution": 30
   },
-  "versionId": "f9114d00-f04e-41a0-9a85-f813de324a48",
+  "versionId": "1bbfb9ad-dc50-4958-bddd-df90953bd9d4",
   "meta": {
     "instanceId": "67feca360238f498c5984ecbf7a6741b76e625e228146bb9c35db9aab254d9ab"
   },

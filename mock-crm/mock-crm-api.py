@@ -137,20 +137,6 @@ def create_contact():
     
     return jsonify(contact), 201
 
-@app.route('/api/contacts/recent', methods=['GET'])
-def get_recent_contacts():
-    """Get recently modified contacts (last 24 hours)"""
-    since = datetime.now() - timedelta(hours=24)
-    recent_contacts = [
-        c for c in contacts_db 
-        if datetime.fromisoformat(c['lastModified']) > since
-    ]
-    
-    return jsonify({
-        "contacts": recent_contacts,
-        "count": len(recent_contacts),
-        "since": since.isoformat()
-    })
 
 @app.route('/api/contacts/simulate', methods=['POST'])
 def simulate_new_contacts():
@@ -185,30 +171,7 @@ def webhook_endpoint():
     
     return jsonify(response)
 
-@app.route('/api/stats', methods=['GET'])
-def get_stats():
-    """Get API statistics"""
-    return jsonify({
-        "totalContacts": len(contacts_db),
-        "apiVersion": "1.0",
-        "uptime": "24h",
-        "lastUpdated": max(c['lastModified'] for c in contacts_db) if contacts_db else None
-    })
-
 if __name__ == '__main__':
-    print("🚀 Starting Mock CRM API Server")
-    print("📍 Available endpoints:")
-    print("   GET  /api/contacts - List contacts with pagination")
-    print("   GET  /api/contacts/<id> - Get specific contact") 
-    print("   POST /api/contacts - Create new contact")
-    print("   GET  /api/contacts/recent - Get recent contacts")
-    print("   POST /api/contacts/simulate - Generate test contacts")
-    print("   POST /webhook/test - Test webhook endpoint")
-    print("   GET  /api/stats - API statistics")
-    print("   GET  /health - Health check")
-    print("")
-    print("🌐 Access at: http://localhost:3000")
-    print("📘 Example: curl http://localhost:3000/api/contacts?limit=5")
-    print("")
-    
+    print("Starting Mock CRM API Server")
+    print("Access at: http://localhost:3000")
     app.run(host='0.0.0.0', port=3000, debug=True)

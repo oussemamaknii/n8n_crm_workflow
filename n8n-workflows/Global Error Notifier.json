@@ -6,40 +6,266 @@
       "type": "n8n-nodes-base.errorTrigger",
       "typeVersion": 1,
       "position": [
-        -480,
+        -64,
         0
       ],
-      "id": "error-trigger-1",
+      "id": "df717235-72d5-4b24-8153-a74b769355a4",
       "name": "Error Trigger"
     },
     {
       "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO processing_errors (\n  error_code, error_message, error_details, input_data,\n  workflow_step, retry_count, resolved, execution_id\n) VALUES (\n  {{ $json.error?.code || null }},\n  {{ $json.error?.message || 'Unknown error' }},\n  {{ JSON.stringify($json.error || {}) }},\n  {{ JSON.stringify($json.execution?.data?.resultData || {}) }},\n  {{ $json.error?.node?.name || null }},\n  0,\n  FALSE,\n  {{ $json.execution?.id || null }}\n);",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "processing_errors",
+          "mode": "list",
+          "cachedResultName": "processing_errors"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "resolved": false,
+            "error_code": "={{ $json.execution?.lastNodeExecuted || null }}",
+            "error_message": "={{ $json.execution.error.message || 'Unknown error' }}",
+            "error_details": "={{ JSON.stringify($json.execution.error) || {} }}",
+            "input_data": "={{ JSON.stringify($json.execution.error?.node.parameters)  || {} }}",
+            "retry_count": "={{ 0 }}",
+            "workflow_step": "={{ $json.execution.error?.node?.name || null }}",
+            "execution_id": "={{ $execution.id }}",
+            "created_at": "={{ $now }}",
+            "contact_id": "={{null}}",
+            "run_id": "={{  null }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "error_code",
+              "displayName": "error_code",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "error_message",
+              "displayName": "error_message",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "error_details",
+              "displayName": "error_details",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "object",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "input_data",
+              "displayName": "input_data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "object",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "workflow_step",
+              "displayName": "workflow_step",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "retry_count",
+              "displayName": "retry_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "resolved",
+              "displayName": "resolved",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "resolved_at",
+              "displayName": "resolved_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "run_id",
+              "displayName": "run_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "contact_id",
+              "displayName": "contact_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "execution_id",
+              "displayName": "execution_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
         "options": {}
       },
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
       "position": [
-        -160,
+        192,
         0
       ],
-      "id": "log-error-to-db-1",
-      "name": "Log Error to DB",
+      "id": "5511ee01-cce4-446b-9df9-24d6d1dba0ec",
+      "name": "Log Error to DB1",
       "credentials": {
         "postgres": {
           "id": "IeOu1chzidy5ogq9",
           "name": "Postgres account"
         }
       }
+    },
+    {
+      "parameters": {
+        "sendTo": "oussemamakniii@gmail.com",
+        "subject": "Error",
+        "message": "new error occured ! check it out !",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        400,
+        0
+      ],
+      "id": "928e385f-9831-4d89-80cf-afa9f26db0aa",
+      "name": "Send a message",
+      "webhookId": "85af9d7f-5be1-48a6-b27b-ceeae516108e",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "yUGar2wQtWTVKqY6",
+          "name": "Gmail account"
+        }
+      }
     }
   ],
+  "pinData": {
+    "Error Trigger": [
+      {
+        "json": {
+          "execution": {
+            "id": "327",
+            "url": "http://localhost:5678/workflow/W3jShPQYuOjrkqcf/executions/327",
+            "error": {
+              "stack": "Error: test\n    at /usr/local/lib/node_modules/n8n/node_modules/.pnpm/n8n-nodes-base@file+packages+nodes-base_@aws-sdk+credential-providers@3.808.0_asn1.js@5_afd197edb2c1f848eae21a96a97fab23/node_modules/n8n-nodes-base/dist/nodes/Code:1:104\n    at /usr/local/lib/node_modules/n8n/node_modules/.pnpm/n8n-nodes-base@file+packages+nodes-base_@aws-sdk+credential-providers@3.808.0_asn1.js@5_afd197edb2c1f848eae21a96a97fab23/node_modules/n8n-nodes-base/dist/nodes/Code:2:2\n    at VM2 Wrapper.apply (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/@n8n+vm2@3.9.25/node_modules/@n8n/vm2/lib/bridge.js:490:11)\n    at NodeVM.run (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/@n8n+vm2@3.9.25/node_modules/@n8n/vm2/lib/nodevm.js:497:23)\n    at JavaScriptSandbox.runCodeAllItems (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/n8n-nodes-base@file+packages+nodes-base_@aws-sdk+credential-providers@3.808.0_asn1.js@5_afd197edb2c1f848eae21a96a97fab23/node_modules/n8n-nodes-base/nodes/Code/JavaScriptSandbox.ts:73:36)\n    at ExecuteContext.execute (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/n8n-nodes-base@file+packages+nodes-base_@aws-sdk+credential-providers@3.808.0_asn1.js@5_afd197edb2c1f848eae21a96a97fab23/node_modules/n8n-nodes-base/nodes/Code/Code.node.ts:198:28)\n    at WorkflowExecute.executeNode (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/n8n-core@file+packages+core_@opentelemetry+api@1.9.0_@opentelemetry+sdk-trace-base@1.30_08b575bec2313d5d8a4cc75358971443/node_modules/n8n-core/src/execution-engine/workflow-execute.ts:1254:31)\n    at WorkflowExecute.runNode (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/n8n-core@file+packages+core_@opentelemetry+api@1.9.0_@opentelemetry+sdk-trace-base@1.30_08b575bec2313d5d8a4cc75358971443/node_modules/n8n-core/src/execution-engine/workflow-execute.ts:1428:22)\n    at /usr/local/lib/node_modules/n8n/node_modules/.pnpm/n8n-core@file+packages+core_@opentelemetry+api@1.9.0_@opentelemetry+sdk-trace-base@1.30_08b575bec2313d5d8a4cc75358971443/node_modules/n8n-core/src/execution-engine/workflow-execute.ts:1761:38\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)",
+              "level": "error",
+              "tags": {},
+              "description": null,
+              "lineNumber": 1,
+              "node": {
+                "parameters": {
+                  "mode": "runOnceForAllItems",
+                  "language": "javaScript",
+                  "jsCode": "throw new Error('test')",
+                  "notice": ""
+                },
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                  -1040,
+                  -272
+                ],
+                "id": "46967e9b-a6aa-42e6-a137-0100863315dd",
+                "name": "Code in JavaScript1"
+              },
+              "message": "test [line 1]"
+            },
+            "lastNodeExecuted": "Code in JavaScript1",
+            "mode": "webhook"
+          },
+          "workflow": {
+            "id": "W3jShPQYuOjrkqcf",
+            "name": "workflow"
+          }
+        }
+      }
+    ]
+  },
   "connections": {
     "Error Trigger": {
       "main": [
         [
           {
-            "node": "Log Error to DB",
+            "node": "Log Error to DB1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Error to DB1": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
             "type": "main",
             "index": 0
           }
@@ -50,7 +276,12 @@
   "active": false,
   "settings": {
     "executionOrder": "v1"
-  }
+  },
+  "versionId": "48c3dbbc-8306-42b5-8527-fd1e67582e5f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "67feca360238f498c5984ecbf7a6741b76e625e228146bb9c35db9aab254d9ab"
+  },
+  "id": "VFFqtNHpF92Vj6Yw",
+  "tags": []
 }
-
-
