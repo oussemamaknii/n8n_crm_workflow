@@ -1,0 +1,729 @@
+{
+  "name": "workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nreturn [\n  {\n    json: {\n      crm_ids_sql: items.map(item => `'${item.json.crm_id}'`).join(',')\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        656,
+        -576
+      ],
+      "id": "17f27f0b-7a95-4218-b29d-c10206034ee8",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "id": "2bc6955d-532d-40f2-8701-4e4dcbbf8014",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2864,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO public.contacts\n(\n  crm_id,\n  first_name,\n  last_name,\n  email,\n  phone_e164,\n  phone_raw,\n  company,\n  job_title,\n  source,\n  created_at,\n  updated_at,\n  processed_at\n)\nVALUES\n(\n  '{{$json.crm_id}}',\n  '{{$json.first_name}}',\n  '{{$json.last_name}}',\n  '{{$json.email}}',\n  {{$json.phone_e164}},\n  '{{$json.phone_raw}}',\n  '{{$json.company}}',\n  '{{$json.job_title}}',\n  '{{$json.source}}',\n  NOW(),\n  NOW(),\n  NOW()\n)\nON CONFLICT (crm_id) DO NOTHING\nRETURNING id, crm_id, email;",
+        "options": {
+          "queryBatching": "independently"
+        }
+      },
+      "id": "df922949-7bb8-4c10-bf94-9422c59c0795",
+      "name": "Insert New Contact",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1488,
+        -512
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "IeOu1chzidy5ogq9",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT crm_id FROM public.contacts WHERE crm_id IN ({{ $json.crm_ids_sql }})",
+        "options": {}
+      },
+      "id": "ed2fa0c4-7dbf-4578-9693-d70b0763be23",
+      "name": "Check Contact Exists",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        832,
+        -576
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "IeOu1chzidy5ogq9",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Phone normalization function\nfunction normalizePhone(phone) {\n  if (!phone) return null;\n  \n  // Remove all non-digit characters except + at the start\n  let cleaned = phone.replace(/[^\\d+]/g, '');\n  \n  // Handle French numbers\n  if (cleaned.startsWith('0')) {\n    // Convert French domestic to international\n    cleaned = '+33' + cleaned.substring(1);\n  } else if (cleaned.startsWith('33') && !cleaned.startsWith('+33')) {\n    cleaned = '+' + cleaned;\n  } else if (!cleaned.startsWith('+') && cleaned.length >= 10) {\n    // Assume French number if no country code\n    cleaned = '+33' + cleaned;\n  }\n  \n  // Basic validation - should be 10-15 digits after normalization\n  const digitsOnly = cleaned.replace(/\\+/g, '');\n  if (digitsOnly.length < 8 || digitsOnly.length > 15) {\n    return null;\n  }\n  \n  return cleaned;\n}\n\n// Email normalization function\nfunction normalizeEmail(email) {\n  if (!email) return null;\n  \n  const trimmed = email.trim().toLowerCase();\n  \n  // Basic email validation\n  const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n  if (!emailRegex.test(trimmed)) {\n    return null;\n  }\n  \n  return trimmed;\n}\n\n// Name normalization function\nfunction normalizeName(name) {\n  if (!name) return null;\n  return name.trim().toUpperCase();\n}\n\nconst contact = $json;\n\n// Apply normalizations\nconst normalized = {\n  ...contact,\n  first_name: normalizeName(contact.first_name),\n  last_name: normalizeName(contact.last_name),\n  email: normalizeEmail(contact.email),\n  phone_e164: normalizePhone(contact.phone_raw),\n  full_name: [contact.first_name, contact.last_name]\n    .filter(n => n && n.trim())\n    .map(n => normalizeName(n))\n    .join(' ') || null,\n  processed_at: new Date().toISOString()\n};\n\nreturn { json: normalized };"
+      },
+      "id": "65c43ff5-be87-47ca-b548-e58f7caf13ec",
+      "name": "Normalize Contact Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        -256
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract contacts from API response\nconst responseData = $input.all();\nconst contacts = [];\n\nfor (const item of responseData) {\n  if (item.json.contacts && Array.isArray(item.json.contacts)) {\n    contacts.push(...item.json.contacts);\n  }\n}\n\n// Transform each contact to our standard format\nconst transformedContacts = contacts.map(contact => ({\n  crm_id: contact.id || `unknown_${Date.now()}_${Math.random()}`,\n  first_name: contact.firstName || '',\n  last_name: contact.lastName || '',\n  email: contact.email || '',\n  phone_raw: contact.phone || '',\n  company: contact.company || '',\n  job_title: contact.jobTitle || '',\n  tags: Array.isArray(contact.tags) ? contact.tags : [],\n  source: 'crm_api',\n  raw_payload: contact,\n  created_at_source: contact.createdAt || contact.lastModified || new Date().toISOString()\n}));\n\nreturn transformedContacts.map(contact => ({ json: contact }));"
+      },
+      "id": "625f17ce-e96f-41df-bb41-e10f30ed8b05",
+      "name": "Extract & Transform Contacts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        16,
+        -272
+      ]
+    },
+    {
+      "parameters": {
+        "path": "contacts-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "7bc1a4bc-bece-4812-9c32-3790b08f68b1",
+      "name": "CRM Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -960,
+        -272
+      ],
+      "webhookId": "contacts-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const existingIds = $('Check Contact Exists').all()\n  .map(item => item.json.crm_id);\n\nconst newContacts = $('Normalize Contact Data').all()\n  .filter(item => {\n    return !existingIds.includes(item.json.crm_id);\n  });\n\nreturn newContacts;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1072,
+        -256
+      ],
+      "id": "95315c0f-0b9a-404a-88ab-eaba8cf79159",
+      "name": "New Contacts",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "df0d3e7e-d22c-478b-b66e-1f74a101e59d",
+              "leftValue": "={{ Object.keys($json).length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1296,
+        -256
+      ],
+      "id": "4a28eb49-ee7f-4dc3-8ee7-baf937a95636",
+      "name": "If",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "url": "http://mock-crm:3000/api/contacts",
+        "options": {}
+      },
+      "id": "e834b111-0b00-424f-b50a-d436b70f2f85",
+      "name": "Fetch CRM Existing Contacts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -448,
+        -432
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email ?? $items('Insert New Contact')[$itemIndex]?.json.email ?? '' }}",
+        "subject": "Insert DB",
+        "message": "you were added to the DB",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1664,
+        -400
+      ],
+      "id": "42deda22-0f36-4c9f-868c-edc1cc791225",
+      "name": "Send a message",
+      "webhookId": "a10a2387-8d7a-4039-a104-9b3604219290",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "yUGar2wQtWTVKqY6",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://mock-crm:3000/api/contacts/simulate",
+        "options": {}
+      },
+      "id": "8e049cad-0730-4a51-9040-99877bd33756",
+      "name": "Fetch CRM New Contacts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -448,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO ingestion_runs (execution_id, workflow_id, status)\nVALUES ('{{$execution.id}}', '{{$workflow.id}}', 'started')\nRETURNING id;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        -720,
+        -272
+      ],
+      "id": "f108a416-02a9-4ee0-857a-3dcaf89aa178",
+      "name": "Start Run",
+      "credentials": {
+        "postgres": {
+          "id": "IeOu1chzidy5ogq9",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE ingestion_runs\nSET contacts_received = {{ $('Extract & Transform Contacts').all().length }}\nWHERE id = {{ $('Start Run').first().json.id }};",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        192,
+        -32
+      ],
+      "id": "a9911d07-053d-48e3-b43b-e12a1b9243b3",
+      "name": "Update Received Count",
+      "alwaysOutputData": false,
+      "credentials": {
+        "postgres": {
+          "id": "IeOu1chzidy5ogq9",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const all = $('Normalize Contact Data').all().map(i => i.json.crm_id);\nconst news = $('New Contacts').all().map(i => i.json.crm_id);\nconst dupes = all.filter(id => !news.includes(id));\nreturn dupes.map(crm_id => ({ json: { crm_id } }));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        -48
+      ],
+      "id": "b1626f83-3b72-4a86-b0b7-9384cbd5e9b9",
+      "name": "Compute Duplicates",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO contact_processing_log (\n  run_id, crm_id, operation, status, message, workflow_execution, node_name, event_type\n) VALUES (\n  {{ $('Start Run').first().json.id }},\n  '{{$json.crm_id}}',\n  'duplicate',\n  'success',\n  'Skipped duplicate',\n  '{{$execution.id}}',\n  'New Contacts',\n  'duplicate'\n);",
+        "options": {
+          "queryBatching": "independently"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1824,
+        -48
+      ],
+      "id": "ff3f6106-5905-4655-a575-76679804e9ee",
+      "name": "Log Duplicates",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "IeOu1chzidy5ogq9",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO contact_processing_log (\n  run_id, contact_id, crm_id, operation, status, message, raw_input, workflow_execution, node_name, event_type\n) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10);",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "{{$('Start Run').first().json.id}}, {{$json.id || null}}, {{$json.crm_id}}, insert, success, Inserted via n8n, {{ JSON.stringify($json) }}, {{$execution.id}}, Insert New Contact, insert"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1664,
+        -624
+      ],
+      "id": "a1e82ee6-816c-4a2c-b28b-1a15c7b1005e",
+      "name": "Log Inserted Contacts",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "IeOu1chzidy5ogq9",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE ingestion_runs\nSET\n  finished_at = NOW(),\n  status = '{{ ((($('Compute Duplicates').all().length || 0) > 0) ? \"warning\" : \"success\") }}',\n  contacts_inserted = {{ $('Insert New Contact').all().length }},\n  duplicates = {{ $('Compute Duplicates').all().length || 0 }},\n  email_sent = {{ $('Send a message').all().length || 0 }},\n  error_count = {{ $execution.error ? 1 : 0 }}\nWHERE id = {{ $('Start Run').first().json.id }};",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        2544,
+        -240
+      ],
+      "id": "4685bf74-60d1-4006-88ec-e19794e16a97",
+      "name": "Finalize Run",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "IeOu1chzidy5ogq9",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        656,
+        224
+      ],
+      "id": "6d3a3b87-7314-48fa-b2fc-8365ce21bb2a",
+      "name": "Error Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO processing_errors (\n  error_code, error_message, error_details, input_data,\n  workflow_step, retry_count, resolved, execution_id\n) VALUES (\n  {{ $json.error?.code || null }},\n  {{ $json.error?.message || 'Unknown error' }},\n  {{ JSON.stringify($json.error || {}) }},\n  {{ JSON.stringify($json.execution?.data?.resultData || {}) }},\n  {{ $json.error?.node?.name || null }},\n  0,\n  FALSE,\n  {{ $json.execution?.id || null }}\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        976,
+        224
+      ],
+      "id": "6b1d703d-bbbc-4145-b23e-8d3783210e47",
+      "name": "Log Error to DB",
+      "credentials": {
+        "postgres": {
+          "id": "IeOu1chzidy5ogq9",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2144,
+        -256
+      ],
+      "id": "9499e35e-54e5-414b-83b3-428f1e66ca5b",
+      "name": "Merge",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "chooseBranch",
+        "useDataOfInput": 2
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1872,
+        -512
+      ],
+      "id": "c4677217-3c6c-49e3-8d0f-adec8d5ba6a4",
+      "name": "Merge2"
+    },
+    {
+      "parameters": {
+        "mode": "chooseBranch"
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        336,
+        -256
+      ],
+      "id": "1d54d469-7fcd-4fb1-a258-1a97223103d1",
+      "name": "Merge3"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -176,
+        -272
+      ],
+      "id": "3ff59dcb-6d4b-4605-beec-28a066a7796c",
+      "name": "Merge4"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Check Contact Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert New Contact": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Inserted Contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Contact Exists": {
+      "main": [
+        [
+          {
+            "node": "New Contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Contact Data": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "New Contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract & Transform Contacts": {
+      "main": [
+        [
+          {
+            "node": "Update Received Count",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CRM Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Start Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Run": {
+      "main": [
+        [
+          {
+            "node": "Fetch CRM Existing Contacts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch CRM New Contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New Contacts": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Compute Duplicates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Insert New Contact",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Compute Duplicates": {
+      "main": [
+        [
+          {
+            "node": "Log Duplicates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch CRM Existing Contacts": {
+      "main": [
+        [
+          {
+            "node": "Merge4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Finalize Run": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch CRM New Contacts": {
+      "main": [
+        [
+          {
+            "node": "Merge4",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Log Error to DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Finalize Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Duplicates": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Log Inserted Contacts": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge2": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Received Count": {
+      "main": [
+        [
+          {
+            "node": "Merge3",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge3": {
+      "main": [
+        [
+          {
+            "node": "Normalize Contact Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge4": {
+      "main": [
+        [
+          {
+            "node": "Extract & Transform Contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "f9114d00-f04e-41a0-9a85-f813de324a48",
+  "meta": {
+    "instanceId": "67feca360238f498c5984ecbf7a6741b76e625e228146bb9c35db9aab254d9ab"
+  },
+  "id": "W3jShPQYuOjrkqcf",
+  "tags": [
+    {
+      "createdAt": "2025-09-24T09:12:33.190Z",
+      "updatedAt": "2025-09-24T09:12:33.190Z",
+      "id": "tibun73j4onCxGH0",
+      "name": "contact-ingestion"
+    }
+  ]
+}

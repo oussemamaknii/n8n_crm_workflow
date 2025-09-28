@@ -1,0 +1,30 @@
+Étude de Cas – Développeur Full Stack Automatisation n8n
+
+Contexte
+TalentAI développe des assistants IA spécialisés par métier pour les TPE/PME.
+Ces assistants reposent sur des workflows d’automatisation (n8n) qui connectent des
+outils tiers (CRM, ERP, outils marketing, bases de données, etc.).
+Nous souhaitons évaluer ta capacité à :
+- Concevoir un workflow complet et robuste dans n8n.
+- Structurer et documenter ton approche.
+- Proposer des améliorations scalables.
+
+Mission
+Construire un workflow n8n qui :
+- Récupère des nouveaux contacts depuis une API CRM (ex. HubSpot ou un mock
+API fourni).
+- Transforme les données (nettoyage : normaliser le format du numéro de
+téléphone, de l’email, mettre le nom en majuscules).
+- Enregistre les données dans une base SQL (PostgreSQL ou MySQL).
+- Envoie une notification (Teams/Email) lorsqu’un nouveau contact est inséré.
+- Gère les erreurs : log automatique dans un fichier/Google Sheet et alerte en cas
+d’échec.
+
+Livrables attendus
+- Workflow n8n exporté (.json)
+- Documentation (max. 2 pages) expliquant :
+> La logique suivie pour concevoir le workflow.
+> Les bonnes pratiques appliquées (sécurité, performance, lisibilité).
+> Les limitations rencontrées et comment tu les améliorerais.
+- Proposition d’amélioration : si ce workflow devait traiter 100 000
+enregistrements/jour, que changerais-tu (architecture, infra, monitori

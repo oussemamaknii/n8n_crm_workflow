@@ -1,0 +1,21 @@
+apiVersion: 1
+datasources:
+  - name: TalentAI Postgres
+    type: postgres
+    access: proxy
+    isDefault: true
+    editable: true
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1500
+      timeInterval: 1m
+    secureJsonData:
+      password: secure_password_123
+    url: postgres:5432
+    user: n8n_user
+    database: talentai
+
+
+
+
+

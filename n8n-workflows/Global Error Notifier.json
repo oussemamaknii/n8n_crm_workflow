@@ -1,0 +1,56 @@
+{
+  "name": "Global Error Notifier",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        0
+      ],
+      "id": "error-trigger-1",
+      "name": "Error Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO processing_errors (\n  error_code, error_message, error_details, input_data,\n  workflow_step, retry_count, resolved, execution_id\n) VALUES (\n  {{ $json.error?.code || null }},\n  {{ $json.error?.message || 'Unknown error' }},\n  {{ JSON.stringify($json.error || {}) }},\n  {{ JSON.stringify($json.execution?.data?.resultData || {}) }},\n  {{ $json.error?.node?.name || null }},\n  0,\n  FALSE,\n  {{ $json.execution?.id || null }}\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        -160,
+        0
+      ],
+      "id": "log-error-to-db-1",
+      "name": "Log Error to DB",
+      "credentials": {
+        "postgres": {
+          "id": "IeOu1chzidy5ogq9",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Log Error to DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
+
+
