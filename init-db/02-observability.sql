@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS ingestion_runs (
     duplicates          INT DEFAULT 0,
     email_sent          INT DEFAULT 0,
     error_count         INT DEFAULT 0,
+    dead_letters        INT DEFAULT 0,
     notes               TEXT
 );
 
@@ -41,4 +42,16 @@ CREATE INDEX IF NOT EXISTS idx_errors_execution_id ON processing_errors(executio
 
 COMMIT;
 
+
+-- Dead-letter table for repeatedly failing or invalid items
+CREATE TABLE IF NOT EXISTS dead_letters (
+    id          BIGSERIAL PRIMARY KEY,
+    run_id      BIGINT REFERENCES ingestion_runs(id),
+    reason      TEXT NOT NULL,
+    payload     JSONB NOT NULL,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_dead_letters_run ON dead_letters(run_id);
+CREATE INDEX IF NOT EXISTS idx_dead_letters_reason ON dead_letters(reason);
 

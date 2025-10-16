@@ -82,7 +82,7 @@ Grafana is provisioned with dashboards from `grafana/dashboards/`. Access at htt
 - Data integrity: parameterized SQL or explicit column mapping, `BIGSERIAL` primary keys, and unique `crm_id` with relevant indexes (email, phone, tags, raw payload GIN).
 - Idempotency: deduplication through existence checks plus `ON CONFLICT DO NOTHING` on `crm_id`.
 - Observability: per-contact logs, per-execution run records, simple metrics usable by Grafana, and structured error logging.
-- Maintainability: clear node names, separation of error handling into a dedicated workflow, and a normalized schema with computed `full_name` for consistent reads.
+- Maintainability: clear node names, separation of error handling into a dedicated workflow.
 
 ### Limitations and targeted improvements
 - Single-instance n8n: the current setup runs inline on one n8n container. Improve resilience with queue mode and workers.

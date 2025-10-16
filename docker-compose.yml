@@ -34,10 +34,51 @@ services:
       timeout: 5s
       retries: 3
 
+  # Redis for n8n queue mode
+  redis:
+    image: redis:7-alpine
+    container_name: talentai_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PgBouncer connection pooler in front of Postgres
+  pgbouncer:
+    image: bitnami/pgbouncer:1
+    container_name: talentai_pgbouncer
+    restart: unless-stopped
+    environment:
+      - PGBOUNCER_DATABASE=*
+      - PGBOUNCER_PORT=6432
+      - PGBOUNCER_POOL_MODE=transaction
+      - PGBOUNCER_MAX_CLIENT_CONN=1000
+      - PGBOUNCER_DEFAULT_POOL_SIZE=50
+      - PGBOUNCER_IGNORE_STARTUP_PARAMETERS=extra_float_digits
+      - POSTGRESQL_HOST=postgres
+      - POSTGRESQL_PORT_NUMBER=5432
+      - POSTGRESQL_USERNAME=${POSTGRES_USER}
+      - POSTGRESQL_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRESQL_DATABASE=${POSTGRES_DB}
+    ports:
+      - "6432:6432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/opt/bitnami/scripts/pgbouncer/healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   # n8n Workflow Automation
-  n8n:
+  n8n-editor:
     image: ${N8N_IMAGE}
-    container_name: ${N8N_CONTAINER_NAME}
+    container_name: ${N8N_CONTAINER_NAME:-talentai_n8n_editor}
     restart: unless-stopped
     environment:
       - N8N_BASIC_AUTH_ACTIVE=${N8N_BASIC_AUTH_ACTIVE}
@@ -48,14 +89,20 @@ services:
       - N8N_PROTOCOL=${N8N_PROTOCOL}
       - WEBHOOK_URL=${WEBHOOK_URL}
       - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
-      - DB_TYPE=${DB_TYPE}
-      - DB_POSTGRESDB_HOST=${DB_POSTGRESDB_HOST}
-      - DB_POSTGRESDB_PORT=${DB_POSTGRESDB_PORT}
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=pgbouncer
+      - DB_POSTGRESDB_PORT=6432
       - DB_POSTGRESDB_DATABASE=${DB_POSTGRESDB_DATABASE}
       - DB_POSTGRESDB_USER=${DB_POSTGRESDB_USER}
       - DB_POSTGRESDB_PASSWORD=${DB_POSTGRESDB_PASSWORD}
       - N8N_LOG_LEVEL=${N8N_LOG_LEVEL}
       - N8N_LOG_OUTPUT=${N8N_LOG_OUTPUT}
+      - N8N_METRICS=true
+      - N8N_EXECUTIONS_MODE=queue
+      - QUEUE_BULL_REDIS_HOST=redis
+      - QUEUE_BULL_REDIS_PORT=6379
+      - QUEUE_BULL_REDIS_DB=0
+      - QUEUE_RECOVERY_INTERVAL=60
     ports:
       - "${N8N_PORT}:5678"
     volumes:
@@ -64,6 +111,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
       mock-crm:
         condition: service_healthy
     healthcheck:
@@ -71,6 +122,39 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  # n8n worker(s) - scale to 3-5 for throughput
+  n8n-worker:
+    image: ${N8N_IMAGE}
+    container_name: talentai_n8n_worker
+    restart: unless-stopped
+    command: n8n worker --concurrency=10
+    environment:
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=pgbouncer
+      - DB_POSTGRESDB_PORT=6432
+      - DB_POSTGRESDB_DATABASE=${DB_POSTGRESDB_DATABASE}
+      - DB_POSTGRESDB_USER=${DB_POSTGRESDB_USER}
+      - DB_POSTGRESDB_PASSWORD=${DB_POSTGRESDB_PASSWORD}
+      - N8N_LOG_LEVEL=${N8N_LOG_LEVEL}
+      - N8N_LOG_OUTPUT=${N8N_LOG_OUTPUT}
+      - N8N_METRICS=true
+      - N8N_EXECUTIONS_MODE=queue
+      - QUEUE_BULL_REDIS_HOST=redis
+      - QUEUE_BULL_REDIS_PORT=6379
+      - QUEUE_BULL_REDIS_DB=0
+      - QUEUE_RECOVERY_INTERVAL=60
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n-workflows:/home/node/.n8n/workflows
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   grafana:
     image: ${GRAFANA_IMAGE}
@@ -85,7 +169,7 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning
       - ./grafana/dashboards:/var/lib/grafana/dashboards
     depends_on:
-      postgres:
+      pgbouncer:
         condition: service_healthy
 
 volumes:

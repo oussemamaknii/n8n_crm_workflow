@@ -54,7 +54,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT crm_idd FROM public.contacts WHERE crm_id IN ({{ $json.crm_ids_sql }})",
+        "query": "SELECT crm_id FROM public.contacts WHERE crm_id IN ({{ $json.crm_ids_sql }})",
         "options": {}
       },
       "id": "ed2fa0c4-7dbf-4578-9693-d70b0763be23",
